@@ -120,6 +120,20 @@ def get_char_codes(tree: list[Node]) -> dict[bytes, str]:
 
     return output
 
+def char_code_canonical(codes: dict[bytes, str]) -> tuple[dict[bytes, str], list[tuple[bytes, int]]]:
+    # Return the canonical codes (for mapping) and the list of code lengths (for later storage)
+    codes_list = list(codes.items())
+    # Sort by length, then lexicographically
+    codes_list.sort(key=lambda x: (len(x[1]), x[0]))
+    canonical_codes: dict[bytes, str] = {}
+    code_lengths: list[tuple[bytes, int]] = []
+
+    for i, (chunk, code) in enumerate(codes_list):
+        canonical_codes[chunk] = code
+        code_lengths.append((chunk, len(code)))
+
+    return canonical_codes, code_lengths
+
 def read_file_as_bin(path: Path) -> bytes:
     with open(path, mode="rb") as file:
         contents = file.read()
@@ -139,6 +153,14 @@ def main():
     codes = get_char_codes(out)
     print("codes:")
     for k, v in codes.items():
+        print(k, "->", v)
+    print("-"*20)
+    canonical_codes, code_lengths = char_code_canonical(codes)
+    print("canonical codes:")
+    for k, v in canonical_codes.items():
+        print(k, "->", v)
+    print("code lengths:")
+    for k, v in code_lengths:
         print(k, "->", v)
 
 if __name__ == "__main__":
