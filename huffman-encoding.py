@@ -12,14 +12,16 @@ traverse tree (stack top-down) and build index for encoding as (dict? chunk: bin
 convert to canonical huffman codes for smaller tree storage
 encode text into binary with hex
 encode tree:
-- width of tree index pointers in bin form, store width as 16 bit unsigned int
-    i.e. if pointer width is 5 bits, store 0000 0000 0000 0101
 - byte length of chunks when in bin form, stored as 16 bit unsigned int
     i.e. width of original chars or chunks (1 for char, 2 for 2-char chunks, etc)
-- tree entries
+- tree entries as list of (chunk, code length) pairs (canonical huffman)
+
 output tree and text into bin
 
-traverse binary (decode bin string that python gives as you go): 
+header needs:
+- chunk size
+
+traverse binary (decode bin string that python gives as you go, convert to bits?): 
 - decode and reconstruct tree
 - build tree in program
 - read in data (stream to file?)
@@ -104,6 +106,20 @@ def char_freq_to_tree(vals: dict[bytes, int]) -> list[Node]:
     
     return tree
 
+def get_char_codes(tree: list[Node]) -> dict[bytes, str]:
+    stack = []
+    output: dict[bytes, str] = {}
+    stack.append(['', tree[-1]])
+    while len(stack) > 0:
+        current = stack.pop()
+        if current[1].is_leaf():
+            output[current[1].contents] = current[0]
+        else:
+            stack.append([current[0] + '0', tree[current[1].children[0]]])
+            stack.append([current[0] + '1', tree[current[1].children[1]]])
+
+    return output
+
 def read_file_as_bin(path: Path) -> bytes:
     with open(path, mode="rb") as file:
         contents = file.read()
@@ -120,6 +136,10 @@ def main():
     out = char_freq_to_tree(freqs)
     for i in range(len(out)):
         print(i, ":", out[i])
+    codes = get_char_codes(out)
+    print("codes:")
+    for k, v in codes.items():
+        print(k, "->", v)
 
 if __name__ == "__main__":
     main()
