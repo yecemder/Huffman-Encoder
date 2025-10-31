@@ -57,9 +57,6 @@ class Node:
     def is_leaf(self) -> bool:
         return self.children is None
     
-    # def __lt__(self, other: Node) -> bool:
-    #     return id(self) < id(other)
-    
     def __str__(self) -> str:
         if self.children:
             return f"C({self.children[0]},{self.children[1]})"
@@ -72,10 +69,6 @@ def count_freqs(data: bytes, chunk_size: int = 1) -> dict[bytes, int]:
     frequencies: dict[bytes, int] = {}
     for i in range(0, len(data), chunk_size):
         chunk = data[i:i + chunk_size]
-        # if chunk in frequencies:
-        #     frequencies[chunk] += 1
-        # else:
-        #     frequencies[chunk] = 1
         frequencies[chunk] = frequencies.get(chunk, 0) + 1
     return frequencies
 
