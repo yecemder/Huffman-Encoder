@@ -37,6 +37,7 @@ end of list, use len(list) to get root node, traverse by content
 """
 from __future__ import annotations
 import heapq as hq
+from itertools import count
 from os import listdir
 from pathlib import Path
 
@@ -50,8 +51,8 @@ class Node:
     def is_leaf(self) -> bool:
         return self.children is None
     
-    def __lt__(self, other: Node) -> bool:
-        return True
+    # def __lt__(self, other: Node) -> bool:
+    #     return id(self) < id(other)
     
     def __str__(self) -> str:
         if self.children:
@@ -72,10 +73,10 @@ def count_freqs(data: bytes, chunk_size: int = 1) -> dict[bytes, int]:
     return frequencies
 
 def char_freq_to_tree(vals: dict[bytes, int]) -> list[Node]:
-    min_heap: list[tuple[int, Node]] = []  # Note the order is flipped so heap can use the int freq.
-    
+    min_heap: list[tuple[int, int, Node]] = []  # Note the order is flipped so heap can use the int freq.
+    counter = count()  # Unique sequence count to avoid comparison issues in heap
     for chunk, freq in vals.items():
-        hq.heappush(min_heap, (freq, Node(contents=chunk)))
+        hq.heappush(min_heap, (freq, next(counter), Node(contents=chunk)))
     
     tree: list[Node] = []
     left_index: int = 0
@@ -85,24 +86,24 @@ def char_freq_to_tree(vals: dict[bytes, int]) -> list[Node]:
         left = hq.heappop(min_heap)
         right = hq.heappop(min_heap)
         
-        if left[1].is_leaf(): 
+        if left[2].is_leaf(): 
             left_index = len(tree)
-            tree.append(left[1])
-        else: 
-            left_index = left[1].index
-        
-        if right[1].is_leaf(): 
-            right_index = len(tree)
-            tree.append(right[1])
+            tree.append(left[2])
         else:
-            right_index = right[1].index
+            left_index = left[2].index
+
+        if right[2].is_leaf(): 
+            right_index = len(tree)
+            tree.append(right[2])
+        else:
+            right_index = right[2].index
         
         # Construct our new node and add to our tree
         new_node = Node(children=[left_index, right_index], index=len(tree))
         tree.append(new_node)
         
         # Return the new node to our heap
-        hq.heappush(min_heap, (left[0] + right[0], new_node))
+        hq.heappush(min_heap, (left[0] + right[0], next(counter), new_node))
     
     return tree
 
