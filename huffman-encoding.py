@@ -16,6 +16,11 @@ encode tree:
     i.e. width of original chars or chunks (1 for char, 2 for 2-char chunks, etc)
 - tree entries as list of (chunk, code length) pairs (canonical huffman)
 
+_____
+NOTE: Do we actually need to fully create a tree structure, or just
+store the required number of bits per chunk for canonical huffman?
+_____
+
 output tree and text into bin
 
 header needs:
@@ -40,6 +45,7 @@ import heapq as hq
 from itertools import count
 from os import listdir
 from pathlib import Path
+from bitarray import bitarray
 
 class Node:
     def __init__(self, children: list[int] | None = None, contents: bytes | None = None, index: int = -1) -> None:
@@ -114,6 +120,8 @@ def get_char_codes(tree: list[Node]) -> dict[bytes, str]:
     stack.append(['', tree[-1]])
     while len(stack) > 0:
         current = stack.pop()
+        # current[0] is the code string so far
+        # current[1] is the Node
         if current[1].is_leaf():
             output[current[1].contents] = current[0]
         else:
@@ -123,47 +131,104 @@ def get_char_codes(tree: list[Node]) -> dict[bytes, str]:
     return output
 
 def char_code_canonical(codes: dict[bytes, str]) -> tuple[dict[bytes, str], list[tuple[bytes, int]]]:
-    # Return the canonical codes (for mapping) and the list of code lengths (for later storage)
-    codes_list = list(codes.items())
-    # Sort by length, then lexicographically
-    codes_list.sort(key=lambda x: (len(x[1]), x[0]))
-    canonical_codes: dict[bytes, str] = {}
-    code_lengths: list[tuple[bytes, int]] = []
+    lengths = sorted([(chunk, len(code)) for chunk, code in codes.items()], key=lambda x: (x[1], x[0]))
+    canonical = {}
+    code = 0
+    prev_len = 0
+    for chunk, length in lengths:
+        code <<= (length - prev_len)
+        canonical[chunk] = format(code, f'0{length}b')
+        code += 1
+        prev_len = length
+    return canonical, lengths
 
-    for i, (chunk, code) in enumerate(codes_list):
-        canonical_codes[chunk] = code
-        code_lengths.append((chunk, len(code)))
+def encode_data(data: bytes, codes: dict[bytes, str], chunk_size: int = 1) -> bitarray:
+    output: bitarray = bitarray()
+    for i in range(0, len(data), chunk_size):
+        chunk = data[i:i + chunk_size]
+        output.extend(codes[chunk])
+    output.fill()  # Pad to full byte
+    return output
 
-    return canonical_codes, code_lengths
+def create_output_data(encoded: bitarray, chunk_size: int, code_lengths: list[tuple[bytes, int]]) -> bytes:
+    # Note that code_lengths is the canonical code lengths list
+    # Create a bytearray to hold the output data
+    output = bytearray()
+    output.extend(chunk_size.to_bytes(1, byteorder='little'))
+    num_codes = len(code_lengths)
+    output.extend(num_codes.to_bytes(4, byteorder='little'))
+    for chunk, length in code_lengths:
+        output.extend(chunk)
+        output.extend(length.to_bytes(1, byteorder='little'))
+    output.extend(encoded.tobytes())
+    return output
 
 def read_file_as_bin(path: Path) -> bytes:
     with open(path, mode="rb") as file:
         contents = file.read()
     return contents
 
-input_file = Path(__file__).parent / "the_input.txt"
+def write_bin_to_file(path: Path, data: bytes) -> None:
+    with open(path, mode="wb") as file:
+        file.write(data)
+
+def get_files_to_compress(directory: Path) -> list[Path]:
+    files = []
+    for entry in directory.iterdir():
+        if entry.is_file():
+            files.append(entry)
+    return files
+
+def compress_file(input_file_path: Path, output_file_path: Path) -> None:
+    print("Compressing file:", input_file_path)
+    file_bytes = read_file_as_bin(input_file_path)
+    print("Finished reading file, length:", len(file_bytes))
+    
+    freqs = count_freqs(file_bytes, CHUNK_SIZE)
+    print("Finished counting frequencies, unique chunks:", len(freqs))
+    
+    out = char_freq_to_tree(freqs)
+    print("Finished building tree, total nodes:", len(out))
+    
+    codes = get_char_codes(out)
+    print("Finished generating codes, total codes:", len(codes))
+    
+    canonical_codes, code_lengths = char_code_canonical(codes)
+    print("Finished generating canonical codes.")
+    
+    encoded = encode_data(file_bytes, canonical_codes, CHUNK_SIZE)
+    print("Finished encoding data.")
+    print(f"Uncompressed length (bytes): {len(file_bytes):,}")
+    print(f"Encoded data length (bytes): {(len(encoded) // 8):,}")
+    
+    output_data = create_output_data(encoded, CHUNK_SIZE, code_lengths)
+    print("Finished creating output data for file.")
+    print(f"Total output length (bytes): {len(output_data):,}")
+    print(f"Compression ratio: {len(output_data) / len(file_bytes) * 100:.2f}%")
+
+    write_bin_to_file(output_file_path, output_data)
+    print("Finished writing output file:", output_file_path)
+
+INPUT_FOLDER = Path(__file__).parent / "inputs"
+OUTPUT_FOLDER = Path(__file__).parent / "outputs"
+
+CHUNK_SIZE = 1  # in bytes
 
 def main():
-    print(listdir())
-    binary = read_file_as_bin(input_file)
-    print("binary:", binary)
-    freqs = count_freqs(binary)
-    print("freqs:", freqs)
-    out = char_freq_to_tree(freqs)
-    for i in range(len(out)):
-        print(i, ":", out[i])
-    codes = get_char_codes(out)
-    print("codes:")
-    for k, v in codes.items():
-        print(k, "->", v)
-    print("-"*20)
-    canonical_codes, code_lengths = char_code_canonical(codes)
-    print("canonical codes:")
-    for k, v in canonical_codes.items():
-        print(k, "->", v)
-    print("code lengths:")
-    for k, v in code_lengths:
-        print(k, "->", v)
+    files = get_files_to_compress(INPUT_FOLDER)
+    
+    if len(files) == 0:
+        print("No input files found in", INPUT_FOLDER)
+        return
+    
+    print("Files to be compressed:")
+    print(*files)
+    
+    for input_file in files:
+        output_file = OUTPUT_FOLDER / (input_file.name + "_compressed.hfmn")
+        compress_file(input_file, output_file)
+    
+    print("Finished writing all output files.")
 
 if __name__ == "__main__":
     main()
