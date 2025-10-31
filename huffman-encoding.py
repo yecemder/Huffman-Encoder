@@ -66,10 +66,11 @@ def count_freqs(data: bytes, chunk_size: int = 1) -> dict[bytes, int]:
     frequencies: dict[bytes, int] = {}
     for i in range(0, len(data), chunk_size):
         chunk = data[i:i + chunk_size]
-        if chunk in frequencies:
-            frequencies[chunk] += 1
-        else:
-            frequencies[chunk] = 1
+        # if chunk in frequencies:
+        #     frequencies[chunk] += 1
+        # else:
+        #     frequencies[chunk] = 1
+        frequencies[chunk] = frequencies.get(chunk, 0) + 1
     return frequencies
 
 def char_freq_to_tree(vals: dict[bytes, int]) -> list[Node]:
